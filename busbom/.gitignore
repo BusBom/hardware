@@ -1,0 +1,45 @@
+# STM32CubeIDE 관련 빌드 및 설정 파일 무시
+
+# 빌드 디렉토리
+/Debug/
+/Release/
+/build/
+
+# 바이너리 파일
+*.elf
+*.bin
+*.hex
+*.map
+
+# IDE 설정 및 로그 파일
+*.launch
+*.log
+*.tmp
+*.bak
+*.swp
+
+# 기타 자동 생성 파일
+*.o
+*.d
+*.lst
+*.dep
+*.su
+*.a
+
+# MacOS 및 Windows 관련
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# STM32CubeMX 생성 백업 파일
+*.ioc.backup
+*.db
+
+# STM32CubeIDE 워크스페이스 설정 (개인마다 다름)
+.cproject
+.project
+.settings/
+.metadata/
+
+# 기타
+*.orig
