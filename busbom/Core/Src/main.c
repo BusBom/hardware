@@ -27,9 +27,10 @@
 #include <stdbool.h>
 #include <string.h>
 #include "bluetooth.h"
+#include "parser.h"
+#include "command.h"
 #include "RGBmatrix.h"
 #include "fontAndIcon.h"
-#include "parser.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -94,46 +95,26 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   MX_TIM10_Init();
+  MX_USART6_UART_Init();
   /* USER CODE BEGIN 2 */
 	bluetooth_init();
 	HAL_TIM_Base_Start_IT(&htim10);
-
-	HUB75_FillScreen(0, 0, 1);
-	draw_frame(1, 1, 0);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+	draw_frame(0, 1, 1); //0, 1, 1
+
 	while (1) {
 		if (msg_from_bluetooth) {
 			char data[100] = { '\0', };
 			get_line_from_bluetooth(data);
 
-			char str[10][100];
-			int count = parse(data, str, ' ', 10);
-
-			for (int i = 0; i < count; i++) {
-				HAL_UART_Transmit(&huart2, (uint8_t*) str[i], strlen(str[i]),
-						10);
-				HAL_UART_Transmit(&huart2, (uint8_t*) "\r\n", strlen("\r\n"),
-						10);
-			}
+			command(data);
 		}
 
-		for(char i = '0'; i < '0'+10; i++){
-			HUB75_FillScreen(0, 0, 1);
-			draw_frame(1, 1, 0);
-			write_character(20, 20, 1, 0, 0, i);
-			HAL_Delay(1000);
-		}
-
-		for(char i = 'A'; i < 'Z'+1; i++){
-			HUB75_FillScreen(0, 0, 1);
-			draw_frame(1, 1, 0);
-			write_character(20, 20, 1, 0, 0, i);
-			HAL_Delay(1000);
-		}
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

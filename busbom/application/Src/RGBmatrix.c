@@ -151,9 +151,11 @@ void HUB75_UpdateRow_ISR(void)
     current_row = (current_row + 1) % (HUB75_HEIGHT / 2); // 다음 행
 }
 
+int onoff = 0;
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM10) {
-        HUB75_UpdateRow_ISR();
+    	if(onoff > 0)
+    		HUB75_UpdateRow_ISR();
     }
 }
