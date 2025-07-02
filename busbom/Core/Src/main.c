@@ -107,11 +107,14 @@ int main(void)
 
 	draw_frame(0, 1, 1); //0, 1, 1
 
+	//write_str_display(0, 0, 1, 0, 0, "0123456789", strlen("0123456789"));
+	//write_str_display(13, 0, 1, 0, 0, "ABCDEFGHIJKLM", strlen("ABCDEFGHIJKLM"));
+	//write_str_display(26, 0, 1, 0, 0, "NOPQRSTUVWXYZ", strlen("ABCDEFGHIJKLM"));
+
 	while (1) {
 		if (msg_from_bluetooth) {
 			char data[100] = { '\0', };
 			get_line_from_bluetooth(data);
-
 			command(data);
 		}
 

@@ -5,16 +5,34 @@
 #include <string.h>
 
 // Digit 0
-static const uint8_t font_0[FONT_HEIGHT][FONT_WIDTH] = { { 1, 1, 1, 1 }, { 1, 1,
-		1, 1 }, { 1, 0, 0, 1 }, { 1, 0, 0, 1 }, { 1, 0, 0, 1 }, { 1, 0, 0, 1 },
-		{ 1, 0, 0, 1 }, { 1, 0, 0, 1 }, { 1, 0, 0, 1 }, { 1, 0, 0, 1 }, { 1, 1,
-				1, 1 }, { 1, 1, 1, 1 }, };
+static const uint8_t font_0[FONT_HEIGHT][FONT_WIDTH] = {
+		{ 1, 1, 1, 1 },
+		{ 1, 1, 1, 1 },
+		{ 1, 0, 0, 1 },
+		{ 1, 0, 0, 1 },
+		{ 1, 0, 0, 1 },
+		{ 1, 0, 0, 1 },
+		{ 1, 0, 0, 1 },
+		{ 1, 0, 0, 1 },
+		{ 1, 0, 0, 1 },
+		{ 1, 0, 0, 1 },
+		{ 1, 1, 1, 1 },
+		{ 1, 1, 1, 1 }, };
 
 // Digit 1
-static const uint8_t font_1[FONT_HEIGHT][FONT_WIDTH] = { { 0, 1, 1, 0 }, { 0, 1,
-		1, 0 }, { 1, 1, 1, 0 }, { 0, 1, 1, 0 }, { 0, 1, 1, 0 }, { 0, 1, 1, 0 },
-		{ 0, 1, 1, 0 }, { 0, 1, 1, 0 }, { 0, 1, 1, 0 }, { 0, 1, 1, 0 }, { 1, 1,
-				1, 1 }, { 1, 1, 1, 1 }, };
+static const uint8_t font_1[FONT_HEIGHT][FONT_WIDTH] = {
+		{ 0, 1, 1, 0 },
+		{ 0, 1, 1, 0 },
+		{ 1, 1, 1, 0 },
+		{ 0, 1, 1, 0 },
+		{ 0, 1, 1, 0 },
+		{ 0, 1, 1, 0 },
+		{ 0, 1, 1, 0 },
+		{ 0, 1, 1, 0 },
+		{ 0, 1, 1, 0 },
+		{ 0, 1, 1, 0 },
+		{ 1, 1,	1, 1 },
+		{ 1, 1, 1, 1 }, };
 
 // Digit 2
 static const uint8_t font_2[FONT_HEIGHT][FONT_WIDTH] = { { 1, 1, 1, 1 }, { 1, 1,
@@ -47,10 +65,19 @@ static const uint8_t font_6[FONT_HEIGHT][FONT_WIDTH] = { { 1, 1, 1, 1 }, { 1, 1,
 				1, 1 }, { 1, 1, 1, 1 }, };
 
 // Digit 7
-static const uint8_t font_7[FONT_HEIGHT][FONT_WIDTH] = { { 1, 1, 1, 1 }, { 1, 1,
-		1, 1 }, { 0, 0, 0, 1 }, { 0, 0, 0, 1 }, { 0, 0, 1, 0 }, { 0, 0, 1, 0 },
-		{ 0, 1, 0, 0 }, { 0, 1, 0, 0 }, { 0, 1, 0, 0 }, { 0, 1, 0, 0 }, { 0, 1,
-				0, 0 }, { 0, 1, 0, 0 }, };
+static const uint8_t font_7[FONT_HEIGHT][FONT_WIDTH] = {
+		{ 1, 1, 1, 1 },
+		{1, 1,  1, 1 },
+		{ 0, 0, 0, 1 },
+		{ 0, 0, 0, 1 },
+		{ 0, 0, 1, 0 },
+		{ 0, 0, 1, 0 },
+		{ 0, 1, 0, 0 },
+		{ 0, 1, 0, 0 },
+		{ 0, 1, 0, 0 },
+		{ 0, 1, 0, 0 },
+		{ 0, 1,	0, 0 },
+		{ 0, 1, 0, 0 }, };
 
 // Digit 8
 static const uint8_t font_8[FONT_HEIGHT][FONT_WIDTH] = { { 1, 1, 1, 1 }, { 1, 1,
@@ -474,11 +501,11 @@ void draw_clock(int r, int g, int b, char (*str)[DISPLAY_STRING_LENGTH]) {
 	line1[2] = str[0][2];
 	line1[3] = str[0][3];
 	line1[4] = '-';
-	line1[5] = '0';
-	line1[6] = str[1][0];        // 월
+	line1[5] = str[1][0];
+	line1[6] = str[1][1];        // 월
 	line1[7] = '-';
-	line1[8] = str[1][1];        // 일 (1st digit)
-	line1[9] = str[1][2];        // 일 (2nd digit)
+	line1[8] = str[1][2];        // 일 (1st digit)
+	line1[9] = str[1][3];        // 일 (2nd digit)
 	line1[10] = '\0';
 
 	// 줄 2: 시간 (HH:MM)
