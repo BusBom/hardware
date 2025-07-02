@@ -1,3 +1,22 @@
+/** 
+ * TEST
+ * char on[] = "ON:\n";
+        char bus[] = "BUS::5678:90AB:CDEF:\n";
+        char time[100];
+        now_time(time);
+        char off[] = "OFF:\n";
+
+        uart_write(serial_fd, on);
+        sleep(1);
+        uart_write(serial_fd, bus);
+        sleep(1);
+        uart_write(serial_fd, time);
+        sleep(1);
+        uart_write(serial_fd, off);
+        sleep(1);
+*/
+
+
 #include <iostream>
 #include <ctime>    
 #include <cstdio>  
@@ -31,21 +50,16 @@ int main(){
     // 2. 시리얼 포트 설정
     uart_set(serial_fd);
 
+    std::string req;
     while(1){
-        char on[] = "ON:\n";
-        char bus[] = "BUS::5678:90AB:CDEF:\n";
-        char time[100];
-        now_time(time);
-        char off[] = "OFF:\n";
+        
+        req.clear();
+        std::cin.clear();
 
-        uart_write(serial_fd, on);
-        sleep(1);
-        uart_write(serial_fd, bus);
-        sleep(1);
-        uart_write(serial_fd, time);
-        sleep(1);
-        uart_write(serial_fd, off);
-        sleep(1);
+        std::cin >> req;
+        req += ":\n";
+        const char* tx_buffer = req.c_str();
+        uart_write(serial_fd, (char*)tx_buffer);        
     }
 
     close(serial_fd);
