@@ -31,6 +31,7 @@
 #include "command.h"
 #include "RGBmatrix.h"
 #include "fontAndIcon.h"
+#include "mp3.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -99,11 +100,14 @@ int main(void)
   /* USER CODE BEGIN 2 */
 	bluetooth_init();
 	HAL_TIM_Base_Start_IT(&htim10);
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+	mp3_init();
+
+	//char number[4][100] = {"1", "102", "103", "6102"};
+	//mp3_bus_inform(number, 4);
 
 	draw_frame(0, 1, 1); //0, 1, 1
 
@@ -117,6 +121,17 @@ int main(void)
 			get_line_from_bluetooth(data);
 			command(data);
 		}
+
+		/*mp3_play_track(6);
+		HAL_Delay(500);
+		mp3_play_track(12);
+		HAL_Delay(500);
+		mp3_play_track(2);
+		HAL_Delay(500);
+		mp3_play_track(13);
+		HAL_Delay(500);
+		mp3_play_track(14);
+		HAL_Delay(2000);*/
 
     /* USER CODE END WHILE */
 

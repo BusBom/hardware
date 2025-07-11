@@ -5,34 +5,16 @@
 #include <string.h>
 
 // Digit 0
-static const uint8_t font_0[FONT_HEIGHT][FONT_WIDTH] = {
-		{ 1, 1, 1, 1 },
-		{ 1, 1, 1, 1 },
-		{ 1, 0, 0, 1 },
-		{ 1, 0, 0, 1 },
-		{ 1, 0, 0, 1 },
-		{ 1, 0, 0, 1 },
-		{ 1, 0, 0, 1 },
-		{ 1, 0, 0, 1 },
-		{ 1, 0, 0, 1 },
-		{ 1, 0, 0, 1 },
-		{ 1, 1, 1, 1 },
-		{ 1, 1, 1, 1 }, };
+static const uint8_t font_0[FONT_HEIGHT][FONT_WIDTH] = { { 1, 1, 1, 1 }, { 1, 1,
+		1, 1 }, { 1, 0, 0, 1 }, { 1, 0, 0, 1 }, { 1, 0, 0, 1 }, { 1, 0, 0, 1 },
+		{ 1, 0, 0, 1 }, { 1, 0, 0, 1 }, { 1, 0, 0, 1 }, { 1, 0, 0, 1 }, { 1, 1,
+				1, 1 }, { 1, 1, 1, 1 }, };
 
 // Digit 1
-static const uint8_t font_1[FONT_HEIGHT][FONT_WIDTH] = {
-		{ 0, 1, 1, 0 },
-		{ 0, 1, 1, 0 },
-		{ 1, 1, 1, 0 },
-		{ 0, 1, 1, 0 },
-		{ 0, 1, 1, 0 },
-		{ 0, 1, 1, 0 },
-		{ 0, 1, 1, 0 },
-		{ 0, 1, 1, 0 },
-		{ 0, 1, 1, 0 },
-		{ 0, 1, 1, 0 },
-		{ 1, 1,	1, 1 },
-		{ 1, 1, 1, 1 }, };
+static const uint8_t font_1[FONT_HEIGHT][FONT_WIDTH] = { { 0, 1, 1, 0 }, { 0, 1,
+		1, 0 }, { 1, 1, 1, 0 }, { 0, 1, 1, 0 }, { 0, 1, 1, 0 }, { 0, 1, 1, 0 },
+		{ 0, 1, 1, 0 }, { 0, 1, 1, 0 }, { 0, 1, 1, 0 }, { 0, 1, 1, 0 }, { 1, 1,
+				1, 1 }, { 1, 1, 1, 1 }, };
 
 // Digit 2
 static const uint8_t font_2[FONT_HEIGHT][FONT_WIDTH] = { { 1, 1, 1, 1 }, { 1, 1,
@@ -65,19 +47,10 @@ static const uint8_t font_6[FONT_HEIGHT][FONT_WIDTH] = { { 1, 1, 1, 1 }, { 1, 1,
 				1, 1 }, { 1, 1, 1, 1 }, };
 
 // Digit 7
-static const uint8_t font_7[FONT_HEIGHT][FONT_WIDTH] = {
-		{ 1, 1, 1, 1 },
-		{1, 1,  1, 1 },
-		{ 0, 0, 0, 1 },
-		{ 0, 0, 0, 1 },
-		{ 0, 0, 1, 0 },
-		{ 0, 0, 1, 0 },
-		{ 0, 1, 0, 0 },
-		{ 0, 1, 0, 0 },
-		{ 0, 1, 0, 0 },
-		{ 0, 1, 0, 0 },
-		{ 0, 1,	0, 0 },
-		{ 0, 1, 0, 0 }, };
+static const uint8_t font_7[FONT_HEIGHT][FONT_WIDTH] = { { 1, 1, 1, 1 }, { 1, 1,
+		1, 1 }, { 0, 0, 0, 1 }, { 0, 0, 0, 1 }, { 0, 0, 1, 0 }, { 0, 0, 1, 0 },
+		{ 0, 1, 0, 0 }, { 0, 1, 0, 0 }, { 0, 1, 0, 0 }, { 0, 1, 0, 0 }, { 0, 1,
+				0, 0 }, { 0, 1, 0, 0 }, };
 
 // Digit 8
 static const uint8_t font_8[FONT_HEIGHT][FONT_WIDTH] = { { 1, 1, 1, 1 }, { 1, 1,
@@ -483,7 +456,7 @@ static int position[DISPLAY_SECTION_CNT][2] = { { 2, 2 }, { 2, 34 }, { 18, 2 },
 		{ 18, 34 } };
 
 void draw_jeongwangpan(int r, int g, int b, char (*str)[DISPLAY_STRING_LENGTH]) {
-
+	draw_frame(0, 1, 1);
 	for (int i = 0; i < DISPLAY_SECTION_CNT; i++) {
 		write_str_display(position[i][0], position[i][1], r, g, b, str[i],
 				strlen(str[i]));
