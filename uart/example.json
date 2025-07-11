@@ -1,0 +1,4 @@
+{
+    "MODE": "ON or OFF",
+    "BUS" : ["BUSNUM1", "BUSNUM2","BUSNUM1", "BUSNUM2"]
+}
