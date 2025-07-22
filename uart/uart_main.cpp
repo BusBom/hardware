@@ -43,7 +43,7 @@ int main() {
     int screen_type = 0;
 
     while (true) {
-        if (std::time(nullptr) - last_print_time >= 60) {
+        if (std::time(nullptr) - last_print_time >= 10) {
             
             process_sleep_mode();
             
