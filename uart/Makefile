@@ -11,6 +11,9 @@ bus: busbom_sequence_test.cpp
 cam: camera_config_test.cpp
 	g++ -o $@ $^ -lrt
 
+sender: simple_sender.cpp
+	g++ -o $@ $^ -lrt -pthread
+
 # 기본 빌드 대상
 all: $(TARGETS)
 

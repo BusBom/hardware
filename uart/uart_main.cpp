@@ -1,213 +1,108 @@
-#include <iostream>
-#include <fstream>
-#include <ctime>
-#include <cstdio>
-#include <cstring>
 #include <fcntl.h>
-#include <errno.h>
-#include <termios.h>
 #include <unistd.h>
+#include <string>
+#include <cstring>
+#include <iostream>
 #include <sys/mman.h>
-#include <sys/stat.h>
 #include "json.hpp"
+
 using json = nlohmann::json;
 
-const char* BUS_SHM_NAME = "/busbom_sequence";
-const size_t BUS_SHM_SIZE = 4096;
-
-const char* CONFIG_SHM_NAME = "/camera_config";
-const size_t CONFIG_SHM_SIZE = 4096;
-
-bool on_triggered_today = false;
-bool off_triggered_today = false;
-
-// UART
-static int serial_fd = -1;
-char buses[4][100] = { "" };
-
-// function declarations
-void uart_init(const char* path);
-int uart_write_line(const char* msg);
-void now_time(char* buf);
-bool read_sequence(char (*buses)[100]);
-bool process_sleep_mode();
-bool is_time_passed(const std::string& ref_time, const struct tm* now);
-bool parse_json_from_shm(const char* shm_name, size_t shm_size, json& out_json);
-
-int main() {
-    uart_init("/dev/ttyACM0");
-    if (serial_fd == -1) return -1;
-
-    uart_write_line("ON:\n");
-    std::time_t last_print_time = std::time(nullptr);
-    int screen_type = 0;
-
-    while (true) {
-        if (std::time(nullptr) - last_print_time >= 10) {
-            
-            process_sleep_mode();
-            
-            if (screen_type == 0) {
-                char tx_buffer[100] = "";
-                now_time(tx_buffer);
-                uart_write_line(tx_buffer);
-            } else {
-                read_sequence(buses);
-                std::string msg = "BUS:";
-                for (int i = 0; i < 4; ++i)
-                    msg += std::string(buses[i]) + ":";
-                msg += "\n";
-                uart_write_line(msg.c_str());
-            }
-
-            screen_type = (screen_type + 1) % 3;
-            last_print_time = std::time(nullptr);
-        }
-
-        sleep(1);
-    }
-
-    close(serial_fd);
-    return 0;
-}
+const char* UART_DEVICE_PATH = "/dev/serdev-uart";  // 수정된 디바이스 노드 경로
+int serial_fd = -1;
 
 // ---------- UART 관련 ----------
 void uart_init(const char* path) {
-    serial_fd = open(path, O_RDWR);
+    serial_fd = open(path, O_WRONLY | O_NONBLOCK);  // write만 사용 중이므로 O_WRONLY
     if (serial_fd < 0) {
-        perror("open UART");
+        perror("open UART device");
         return;
     }
 
-    termios tty = {};
-    if (tcgetattr(serial_fd, &tty) != 0) {
-        perror("tcgetattr");
-        close(serial_fd);
-        serial_fd = -1;
-        return;
-    }
-
-    cfsetospeed(&tty, B115200);
-    cfsetispeed(&tty, B115200);
-
-    tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
-    tty.c_cflag |= (CLOCAL | CREAD);
-    tty.c_cflag &= ~(PARENB | PARODD | CSTOPB | CRTSCTS);
-    tty.c_iflag &= ~(IXON | IXOFF | IXANY | IGNBRK);
-    tty.c_lflag = 0;
-    tty.c_oflag = 0;
-    tty.c_cc[VMIN] = 1;
-    tty.c_cc[VTIME] = 1;
-
-    if (tcsetattr(serial_fd, TCSANOW, &tty) != 0) {
-        perror("tcsetattr");
-        close(serial_fd);
-        serial_fd = -1;
-    }
+    std::cout << "UART opened at " << path << std::endl;
 }
 
 int uart_write_line(const char* msg) {
     if (serial_fd == -1) return -1;
-    return write(serial_fd, msg, strlen(msg));
-}
 
-// ---------- 시간 관련 ----------
-void now_time(char* buf) {
-    setenv("TZ", "Asia/Seoul", 1);
-    tzset();
-    time_t t = time(nullptr);
-    struct tm* now = localtime(&t);
-    sprintf(buf, "TIME:%04d:%02d%02d:%02d%02d:\n",
-            now->tm_year + 1900, now->tm_mon + 1, now->tm_mday,
-            now->tm_hour, now->tm_min);
-}
-
-bool is_time_passed(const std::string& ref_time, const struct tm* now) {
-    int h = std::stoi(ref_time.substr(0, 2));
-    int m = std::stoi(ref_time.substr(3, 2));
-    return (now->tm_hour > h) || (now->tm_hour == h && now->tm_min >= m);
-}
-
-// ---------- 슬립모드 처리 ----------
-bool process_sleep_mode() {
-    time_t raw = time(nullptr);
-    struct tm* now = localtime(&raw);
-
-    if (now->tm_hour == 0 && now->tm_min == 0) {
-        on_triggered_today = false;
-        off_triggered_today = false;
+    ssize_t written = write(serial_fd, msg, strlen(msg));
+    if (written < 0) {
+        perror("write to UART");
     }
-
-    json config;
-    if (!parse_json_from_shm(CONFIG_SHM_NAME, CONFIG_SHM_SIZE, config)) return false;
-
-    if (!config.contains("sleepMode") || !config["sleepMode"]["enabled"].get<bool>())
-        return false;
-
-    const std::string& startTime = config["sleepMode"]["startTime"];
-    const std::string& endTime   = config["sleepMode"]["endTime"];
-
-    if (!on_triggered_today && is_time_passed(startTime, now)) {
-        uart_write_line("ON:\n");
-        on_triggered_today = true;
-    }
-
-    if (!off_triggered_today && is_time_passed(endTime, now)) {
-        uart_write_line("OFF:\n");
-        off_triggered_today = true;
-    }
-
-    return true;
+    return written;
 }
 
-// ---------- 버스 정보 처리 ----------
-bool read_sequence(char (*buses)[100]) {
-    json bus_data;
-    if (!parse_json_from_shm(BUS_SHM_NAME, BUS_SHM_SIZE, bus_data)) return false;
+// ---------- 공유 메모리 관련 ----------
+const char* BUS_SHM_NAME = "/busbom_sequence";
+const size_t BUS_SHM_SIZE = 4096;
 
-    bool changed = false;
-    for (const auto& item : bus_data) {
-        int platform = item.value("platform", -1);
-        std::string number = item.value("busNumber", "");
+const char* CONFIG_SHM_NAME = "/config_shm";
+const size_t CONFIG_SHM_SIZE = 4096;
 
-        if (platform >= 1 && platform <= 4) {
-            if (strcmp(buses[platform - 1], number.c_str()) != 0) {
-                strncpy(buses[platform - 1], number.c_str(), sizeof(buses[0]) - 1);
-                buses[platform - 1][sizeof(buses[0]) - 1] = '\0';
-                changed = true;
-            }
-        }
-    }
+int bus_shm_fd = -1, config_shm_fd = -1;
+char* bus_shm_ptr = nullptr;
+char* config_shm_ptr = nullptr;
 
-    return changed;
-}
+void init_shared_memory() {
+    bus_shm_fd = shm_open(BUS_SHM_NAME, O_RDONLY, 0666);
+    config_shm_fd = shm_open(CONFIG_SHM_NAME, O_RDONLY, 0666);
 
-// ---------- 공통 JSON 파서 ----------
-bool parse_json_from_shm(const char* shm_name, size_t shm_size, json& out_json) {
-    int fd = shm_open(shm_name, O_RDONLY, 0666);
-    if (fd == -1) {
+    if (bus_shm_fd < 0 || config_shm_fd < 0) {
         perror("shm_open");
-        return false;
+        return;
     }
 
-    void* ptr = mmap(nullptr, shm_size, PROT_READ, MAP_SHARED, fd, 0);
-    if (ptr == MAP_FAILED) {
-        perror("mmap");
-        close(fd);
-        return false;
-    }
+    bus_shm_ptr = static_cast<char*>(mmap(nullptr, BUS_SHM_SIZE, PROT_READ, MAP_SHARED, bus_shm_fd, 0));
+    config_shm_ptr = static_cast<char*>(mmap(nullptr, CONFIG_SHM_SIZE, PROT_READ, MAP_SHARED, config_shm_fd, 0));
+}
+
+// ---------- JSON 파싱 및 제어 ----------
+bool is_sleep_mode = false;
+int frame_counter = 0;
+
+void check_and_send_uart() {
+    if (!bus_shm_ptr || !config_shm_ptr) return;
 
     try {
-        std::string json_str(static_cast<char*>(ptr));
-        out_json = json::parse(json_str);
-    } catch (const std::exception& e) {
-        std::cerr << "JSON parse error: " << e.what() << std::endl;
-        munmap(ptr, shm_size);
-        close(fd);
-        return false;
+        json bus_json = json::parse(bus_shm_ptr);
+        json config_json = json::parse(config_shm_ptr);
+
+        bool config_sleep_mode = config_json.value("sleep_mode", false);
+
+        if (config_sleep_mode != is_sleep_mode) {
+            if (config_sleep_mode) {
+                uart_write_line("OFF:\n");
+            } else {
+                uart_write_line("ON:\n");
+            }
+            is_sleep_mode = config_sleep_mode;
+        }
+
+        // 매 60프레임마다 한 번 버스 정보 전송
+        if (!is_sleep_mode && ++frame_counter >= 60) {
+            std::string json_str = bus_json.dump();
+            if (!json_str.empty()) {
+                uart_write_line(json_str.c_str());
+                uart_write_line("\n");
+            }
+            frame_counter = 0;
+        }
+    } catch (std::exception& e) {
+        std::cerr << "JSON parsing error: " << e.what() << std::endl;
+    }
+}
+
+int main() {
+    uart_init(UART_DEVICE_PATH);
+    if (serial_fd == -1) return -1;
+
+    init_shared_memory();
+    if (!bus_shm_ptr || !config_shm_ptr) return -1;
+
+    while (true) {
+        check_and_send_uart();
+        usleep(1000 * 16);  // 60fps 기준
     }
 
-    munmap(ptr, shm_size);
-    close(fd);
-    return true;
+    return 0;
 }

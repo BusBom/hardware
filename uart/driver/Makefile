@@ -1,4 +1,4 @@
-obj-m += serdev_echo.o
+obj-m += serdev_uart.o
 
 all: module dt
 	echo Builded Device Tree Overlay and kernel module
