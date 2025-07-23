@@ -91,6 +91,11 @@ void mp3_bus_inform(char (*arr)[100], uint32_t size) {
 	HAL_Delay(2000);
 
 	for (int i = 0; i < size; i++) {
+
+		if(arr[i][0] == ' '){
+			continue;
+		}
+
 		char number[100] = { '\0', };
 		int number_index = 0;
 
@@ -107,7 +112,9 @@ void mp3_bus_inform(char (*arr)[100], uint32_t size) {
 
 		call_number(number, &number_index);
 
+
 		mp3_play_track(SOUND_TRCK_BUN);
+
 		HAL_Delay(800);
 	}
 

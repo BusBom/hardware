@@ -48,4 +48,8 @@ void command(char *data) {
 		}
 		draw_clock(1, 0, 0, time);
 	}
+	else if(strcmp(parsed_cmd_parameters[0], "CONN") == 0){
+		uint8_t conn[] = "1";
+		HAL_UART_Transmit(&huart2, (uint8_t*)conn, sizeof(conn), 10);
+	}
 }
