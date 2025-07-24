@@ -3,10 +3,10 @@ sudo truncate -s 0 /var/log/syslog
 sudo truncate -s 0 /var/log/messages
 sudo truncate -s 0 /var/log/kern.log
 */
-
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/serdev.h>
+#include <linux/kthread.h>
 #include <linux/mod_devicetable.h>
 #include <linux/of_device.h>
 #include <linux/miscdevice.h>
@@ -47,8 +47,10 @@ static ktime_t sub_period;
 /*mutex variable*/
 static DEFINE_MUTEX(conn_mtx);
 static bool conn_state = false; // true : connected, false : unconnected
-tatic DEFINE_MUTEX(onoff_mtx);	// true : on, false : off
-static bool onoff_mtx = false;
+static DEFINE_MUTEX(onoff_mtx); // true : on, false : off
+static bool onoff_state = false;
+static DEFINE_MUTEX(is_there_bus_mtx);
+static bool is_there_bus = false;
 static DEFINE_MUTEX(bus_array_mtx);
 static char bus_array[MAX_PLATFORM_SIZE][MAX_STR_SIZE];
 static DEFINE_MUTEX(time_config_array_mtx);
@@ -58,13 +60,14 @@ static struct timespec64 time_config_array[2]; // local time base
 static ssize_t dev_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos);
 static ssize_t dev_read(struct file *file, char __user *buf, size_t count, loff_t *ppos);
 
+static int uart_txrx_thread_fn(void); static struct task_struct *uart_txrx_thread;
 static enum hrtimer_restart main_timer_callback(struct hrtimer *timer);
 static enum hrtimer_restart sub_timer_callback(struct hrtimer *timer);
 static int parse(char *src, char (*dest)[100], char delimeter, int max_tokens);
 static int fill_timespec64_with_hhmm(const char *hhmm_str, struct timespec64 *ts_out);
 static unsigned long millis(void);
-static void delay_ms(unsigned int ms);
-static bool is_new_bus_array();
+static void ms_delay(unsigned int ms);
+static bool is_new_bus_array(void);
 
 static int serdev_uart_recv(struct serdev_device *serdev, const unsigned char *buffer, size_t size);
 static ssize_t serdev_uart_read(struct file *file, char __user *buf, size_t count, loff_t *ppos);
@@ -171,11 +174,11 @@ static ssize_t dev_write(struct file *file, const char __user *buf, size_t count
 		 time64_to_tm(time_config_array[0].tv_sec, offset_sec, &st);
 		 time64_to_tm(time_config_array[1].tv_sec, offset_sec, &et);
 
-		 pr_info("Formatted time start: %04ld-%02d-%02d %02d:%02d\n",
+		 // pr_info("Formatted time start: %04ld-%02d-%02d %02d:%02d\n",
 				 st.tm_year + 1900, st.tm_mon + 1, st.tm_mday,
 				 st.tm_hour, st.tm_min);
 
-		 pr_info("Formatted time end  : %04ld-%02d-%02d %02d:%02d\n",
+		 // pr_info("Formatted time end  : %04ld-%02d-%02d %02d:%02d\n",
 				 et.tm_year + 1900, et.tm_mon + 1, et.tm_mday,
 				 et.tm_hour, et.tm_min);*/
 	}
@@ -248,19 +251,26 @@ static ssize_t dev_read(struct file *file, char __user *buf, size_t count, loff_
 	return retval;
 }
 
+/*uart tx-rx thread function */
+//need int type queue
+static int uart_txrx_thread_fn(void){
+
+}
+
 /*main timer callback*/
 static char prev_bus_input[MAX_PLATFORM_SIZE][MAX_STR_SIZE];
 
 static bool is_new_bus_array()
 {
+	mutex_lock(&bus_array_mtx);
 	for (int i = 0; i < MAX_PLATFORM_SIZE; i++)
 	{
-		if (strcmp(bus_array_mtx[i], prev_bus_input[i]) != 0)
+		if (strcmp(bus_array[i], prev_bus_input[i]) != 0)
 		{
 			return true;
 		}
 	}
-
+	mutex_lock(&bus_array_mtx);
 	return false;
 }
 
@@ -268,11 +278,11 @@ static enum hrtimer_restart main_timer_callback(struct hrtimer *timer)
 {
 	/*connection */
 	unsigned long ms = millis();
+	mutex_lock(&conn_mtx);
 	while (millis() - ms < 50)
 	{
 		serdev_device_write_buf(global_serdev, "CONN:\n", strlen("CONN:\n"));
 		ms_delay(5);
-		mutex_lock(&conn_mtx);
 		if (strlen(rx_buffer) == 1 && rx_buffer[0] == '1')
 		{
 
@@ -284,7 +294,6 @@ static enum hrtimer_restart main_timer_callback(struct hrtimer *timer)
 			else
 			{
 				conn_state = false;
-				ms = millis();
 			}
 		}
 		ms_delay(5);
@@ -300,11 +309,32 @@ static enum hrtimer_restart main_timer_callback(struct hrtimer *timer)
 			for (int i = 0; i < MAX_PLATFORM_SIZE; i++)
 			{
 				strncpy(prev_bus_input[i], bus_array[i], sizeof(prev_bus_input[i]));
-				prev_bus_input[sizeof(prev_bus_input[i]) - 1] = '\0';
+				prev_bus_input[i][sizeof(prev_bus_input[i]) - 1] = '\0';
 			}
 			mutex_unlock(&bus_array_mtx);
 
-			//여기부터
+			char cmd_buf[MAX_STR_SIZE] = "BUS:";
+			int len = strlen(cmd_buf);
+			for (int i = 0; i < MAX_PLATFORM_SIZE; i++)
+			{
+				int ret = snprintf(cmd_buf + len, MAX_STR_SIZE - len, "%s:", prev_bus_input[i]);
+				if (ret < 0 || ret >= MAX_STR_SIZE - len)
+					break;
+				len += ret;
+			}
+			cmd_buf[len] = '\n'; // 마지막 ':' → '\n'으로 바꿈
+
+			serdev_device_write_buf(global_serdev, cmd_buf, index + 1);
+
+			mutex_lock(&is_there_bus_mtx);
+			is_there_bus = true;
+			mutex_unlock(&is_there_bus_mtx);
+		}
+		else
+		{
+			mutex_lock(&is_there_bus_mtx);
+			is_there_bus = false;
+			mutex_unlock(&is_there_bus_mtx);
 		}
 	}
 
@@ -331,7 +361,7 @@ static int serdev_uart_recv(struct serdev_device *serdev, const unsigned char *b
 	rx_buffer[to_copy] = '\0';
 	rx_size = to_copy;
 
-	pr_info("serdev_echo: Received %zu bytes: %s\n", to_copy, rx_buffer);
+	// pr_info("serdev_echo: Received %zu bytes: %s\n", to_copy, rx_buffer);
 
 	is_updated = false;
 
@@ -371,7 +401,7 @@ static ssize_t serdev_uart_write(struct file *file, const char __user *buf, size
 
 	kbuf[to_copy] = '\0';
 
-	pr_info("serdev_echo: Sending %zu bytes: %s\n", to_copy, kbuf);
+	// pr_info("serdev_echo: Sending %zu bytes: %s\n", to_copy, kbuf);
 	serdev_device_write_buf(global_serdev, kbuf, to_copy);
 
 	return to_copy;
@@ -382,7 +412,7 @@ static int serdev_uart_probe(struct serdev_device *serdev)
 {
 	int ret;
 
-	pr_info("serdev_echo: probe called\n");
+	// pr_info("serdev_echo: probe called\n");
 	global_serdev = serdev;
 
 	serdev_device_set_client_ops(serdev, &serdev_echo_ops);
@@ -411,6 +441,12 @@ static int serdev_uart_probe(struct serdev_device *serdev)
 	sub_timer.function = sub_timer_callback;
 	hrtimer_start(&sub_timer, sub_period, HRTIMER_MODE_REL);
 
+	uart_txrx_thread = kthread_run(uart_txrx_thread_fn, NULL, "uart_txrx_thread");
+	if (IS_ERR(uart_txrx_thread)) {
+		pr_err("kthread_driver: failed to create thread\n");
+		return PTR_ERR(my_thread);
+	}
+
 	ret = misc_register(&echo_miscdev);
 	if (ret)
 	{
@@ -419,13 +455,18 @@ static int serdev_uart_probe(struct serdev_device *serdev)
 		return ret;
 	}
 
-	pr_info("serdev_echo: /dev/%s created\n", DEVICE_NAME);
+	// pr_info("serdev_echo: /dev/%s created\n", DEVICE_NAME);
 	return 0;
 }
 
 static void serdev_uart_remove(struct serdev_device *serdev)
 {
-	pr_info("serdev_echo: remove called\n");
+	// pr_info("serdev_echo: remove called\n");
+
+	if (uart_txrx_thread) {
+		kthread_stop(uart_txrx_thread);  // 쓰레드 종료 요청
+		my_thread = NULL;
+	}
 
 	hrtimer_cancel(&main_timer);
 	hrtimer_cancel(&sub_timer);
@@ -491,7 +532,7 @@ static unsigned long millis(void)
 	return jiffies_to_msecs(jiffies);
 }
 
-static void delay_ms(unsigned int ms)
+static void ms_delay(unsigned int ms)
 {
 	unsigned long now = millis();
 	while (millis() - now < ms)
