@@ -94,9 +94,9 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_USART2_UART_Init();
   MX_TIM10_Init();
   MX_USART6_UART_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 	bluetooth_init();
 	HAL_TIM_Base_Start_IT(&htim10);
@@ -109,6 +109,7 @@ int main(void)
 	//char number[4][100] = {"1", "102", "103", "6102"};
 	//mp3_bus_inform(number, 4);
 
+	//command("ON:\n");
 	draw_frame(0, 1, 1); //0, 1, 1
 
 	//write_str_display(0, 0, 1, 0, 0, "0123456789", strlen("0123456789"));

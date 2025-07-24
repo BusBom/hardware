@@ -50,6 +50,6 @@ void command(char *data) {
 	}
 	else if(strcmp(parsed_cmd_parameters[0], "CONN") == 0){
 		uint8_t conn[] = "1";
-		HAL_UART_Transmit(&huart2, (uint8_t*)conn, sizeof(conn), 10);
+		HAL_UART_Transmit(&huart1, (uint8_t*)conn, 1, 10);
 	}
 }

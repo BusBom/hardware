@@ -11,16 +11,19 @@
 
 
 static HUB75_Config hub75_pins = {
-		.R1 = { GPIOA, GPIO_PIN_10 },
+		.R1 = { GPIOB, GPIO_PIN_13 },
 		.G1 = { GPIOC,GPIO_PIN_4 },
 		.B1 = { GPIOB, GPIO_PIN_5 },
+
 		.R2 = { GPIOB, GPIO_PIN_4 },
 		.G2 = {GPIOB, GPIO_PIN_10 },
 		.B2 = { GPIOA, GPIO_PIN_8 },
-		.A = { GPIOA, GPIO_PIN_9 },
+
+		.A = { GPIOB, GPIO_PIN_14 },
 		.B = { GPIOC, GPIO_PIN_7 },
 		.C = { GPIOB, GPIO_PIN_6 },
 		.D = { GPIOA, GPIO_PIN_7 },
+
 		.CLK = { GPIOA, GPIO_PIN_6 },
 		.LAT = { GPIOA, GPIO_PIN_5 },
 		.OE = { GPIOB, GPIO_PIN_9 }

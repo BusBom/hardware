@@ -15,7 +15,7 @@ bool msg_from_bluetooth = false;
 void bluetooth_init() {
 	rx_index = 0;
 	memset(rx_buffer, 0, RX_BUFFER_SIZE);
-	HAL_UART_Receive_IT(&huart2, &rx_data, 1);  // 1바이트 수신 시작
+	HAL_UART_Receive_IT(&huart1, &rx_data, 1);  // 1바이트 수신 시작
 }
 
 // 버퍼 초기화 함수
@@ -37,7 +37,7 @@ void get_line_from_bluetooth(char* buf){
 
 // UART 수신 완료 콜백 (1바이트마다 호출)
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-	if (huart->Instance == USART2) {
+	if (huart->Instance == USART1) {
 		if (rx_index < RX_BUFFER_SIZE - 1) {
 			rx_buffer[rx_index++] = rx_data;
 
@@ -54,16 +54,16 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 		}
 
 		// 다음 바이트 수신 재시작
-		HAL_UART_Receive_IT(&huart2, &rx_data, 1);
+		HAL_UART_Receive_IT(&huart1, &rx_data, 1);
 	}
 }
 
 // UART 에러 발생 시 콜백 (인터럽트 재설정 포함)
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
-	if (huart->Instance == USART2) {
+	if (huart->Instance == USART1) {
 		rx_buffer_clear();
 		msg_from_bluetooth = false;
 		// 인터럽트 기반 수신 재설정
-		HAL_UART_Receive_IT(&huart2, &rx_data, 1);
+		HAL_UART_Receive_IT(&huart1, &rx_data, 1);
 	}
 }
