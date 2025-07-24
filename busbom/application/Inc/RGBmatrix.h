@@ -6,13 +6,13 @@
  */
 
 /*
- * PA2 : R1
+ * PB13 : R1
  * PC4 : G1
  * PB5 : B1
  * PB4 : R2
  * PB10 : G2
  * PA8 : B2
- * PA3 : A
+ * PB14 : A
  * PC7 : B
  * PB6 : C
  * PA7 : D
