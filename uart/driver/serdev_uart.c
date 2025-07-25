@@ -36,8 +36,8 @@ MODULE_DESCRIPTION("UART serdev driver with string I/O via /dev/serdev-uart");
 static struct serdev_device *global_serdev;
 
 /*uart */
+static DEFINE_MUTEX(rx_buffer_mtx);
 static char rx_buffer[256];
-static bool is_updated = true;
 static size_t rx_size;
 
 /*timer */
@@ -67,23 +67,24 @@ static ssize_t dev_write(struct file *file, const char __user *buf,
 static ssize_t dev_read(struct file *file, char __user *buf, size_t count,
                         loff_t *ppos);
 
-static int uart_txrx_thread_fn(void *data);
 static struct task_struct *uart_txrx_thread;
+static cmd_queue_t uart_cmd_queue;
+static int uart_txrx_thread_fn(void *data);
 static enum hrtimer_restart main_timer_callback(struct hrtimer *timer);
 static enum hrtimer_restart sub_timer_callback(struct hrtimer *timer);
 static int parse(char *src, char (*dest)[100], char delimeter, int max_tokens);
 static int fill_timespec64_with_hhmm(const char *hhmm_str,
                                      struct timespec64 *ts_out);
-static unsigned long millis(void);
-static void ms_delay(unsigned int ms);
+static void format_local_timespec64_to_string(
+    const struct timespec64 *ts,  // debuging
+    char *buf, size_t buf_size);
+
+static char prev_bus_array[MAX_PLATFORM_SIZE][MAX_STR_SIZE];
 static bool is_new_bus_array(void);
+static void get_clock_cmd(char *buf, size_t buf_size);
 
 static int serdev_uart_recv(struct serdev_device *serdev,
                             const unsigned char *buffer, size_t size);
-static ssize_t serdev_uart_read(struct file *file, char __user *buf,
-                                size_t count, loff_t *ppos);
-static ssize_t serdev_uart_write(struct file *file, const char __user *buf,
-                                 size_t count, loff_t *ppos);
 static int serdev_uart_probe(struct serdev_device *serdev);
 static void serdev_uart_remove(struct serdev_device *serdev);
 
@@ -175,30 +176,32 @@ static ssize_t dev_write(struct file *file, const char __user *buf,
     mutex_unlock(&time_config_array_mtx);
 
     // --- 디버깅 출력부 수정 ---
-    /* struct tm st, et;
-     long offset_sec = -sys_tz.tz_minuteswest * 60; // 시스템 시간대 오프셋(초)
+    struct tm st, et;
+    long offset_sec = -sys_tz.tz_minuteswest * 60;  // 시스템 시간대 오프셋(초)
 
-     // 저장된 UTC 타임스탬프를 시스템 로컬 시간으로 변환하여 출력
-     time64_to_tm(time_config_array[0].tv_sec, offset_sec, &st);
-     time64_to_tm(time_config_array[1].tv_sec, offset_sec, &et);
+    // 저장된 UTC 타임스탬프를 시스템 로컬 시간으로 변환하여 출력
+    time64_to_tm(time_config_array[0].tv_sec, offset_sec, &st);
+    time64_to_tm(time_config_array[1].tv_sec, offset_sec, &et);
 
-     // pr_info("Formatted time start: %04ld-%02d-%02d %02d:%02d\n",
-                     st.tm_year + 1900, st.tm_mon + 1, st.tm_mday,
-                     st.tm_hour, st.tm_min);
+    pr_info("Formatted time start: %04ld-%02d-%02d %02d:%02d\n",
+            st.tm_year + 1900, st.tm_mon + 1, st.tm_mday, st.tm_hour,
+            st.tm_min);
 
-     // pr_info("Formatted time end  : %04ld-%02d-%02d %02d:%02d\n",
-                     et.tm_year + 1900, et.tm_mon + 1, et.tm_mday,
-                     et.tm_hour, et.tm_min);*/
+    pr_info("Formatted time end  : %04ld-%02d-%02d %02d:%02d\n",
+            et.tm_year + 1900, et.tm_mon + 1, et.tm_mday, et.tm_hour,
+            et.tm_min);
   } else if (parsed_count == 4) {
     // 요청하신 대로 mutex_lock으로 변경
     mutex_lock(&bus_array_mtx);
 
     // ⚠️ [중요] memcpy 대신 strncpy를 사용하여 버퍼
     // 오버플로우를 방지하고 NULL 종단을 보장합니다.
-    strncpy(bus_array[0], parsed_str[0], MAX_STR_SIZE - 1);
-    strncpy(bus_array[1], parsed_str[1], MAX_STR_SIZE - 1);
-    strncpy(bus_array[2], parsed_str[2], MAX_STR_SIZE - 1);
-    strncpy(bus_array[3], parsed_str[3], MAX_STR_SIZE - 1);
+    for (int i = 0; i < MAX_PLATFORM_SIZE; i++) {
+      strncpy(bus_array[i], parsed_str[i], MAX_STR_SIZE - 1);
+      bus_array[i][MAX_STR_SIZE - 1] = '\0';  // NULL 종단 보장
+
+      printk("BUS: %s", bus_array[i]);
+    }
 
     mutex_unlock(&bus_array_mtx);
   }
@@ -210,7 +213,9 @@ static ssize_t dev_write(struct file *file, const char __user *buf,
 /*fread function*/
 static ssize_t dev_read(struct file *file, char __user *buf, size_t count,
                         loff_t *ppos) {
-  char sig_val;
+  char sig_val[2] = {
+      0,
+  };
   ssize_t retval = 0;
 
   // 사용자가 요청한 count가 1바이트보다 작으면 읽을 수 없음
@@ -228,9 +233,9 @@ static ssize_t dev_read(struct file *file, char __user *buf, size_t count,
   }
 
   if (conn_state) {
-    sig_val = '1';
+    sig_val[0] = 1;
   } else {
-    sig_val = '0';
+    sig_val[0] = 0;
   }
 
   // 사용자 공간으로 1바이트 복사
@@ -250,43 +255,126 @@ static ssize_t dev_read(struct file *file, char __user *buf, size_t count,
 }
 
 /*uart tx-rx thread function */
-
-static char prev_bus_input[MAX_PLATFORM_SIZE][MAX_STR_SIZE];
-
-static bool is_new_bus_array() {
-  mutex_lock(&bus_array_mtx);
-  for (int i = 0; i < MAX_PLATFORM_SIZE; i++) {
-    if (strcmp(bus_array[i], prev_bus_input[i]) != 0) {
-      return true;
-    }
-  }
-  mutex_lock(&bus_array_mtx);
-  return false;
-}
-
-static cmd_queue_t uart_cmd_queue;
 static int uart_txrx_thread_fn(void *data) {
   cmd_queue_init(&uart_cmd_queue);
 
   uint8_t cmd;
+  bool is_daily_updated = false;
+
   while (!kthread_should_stop()) {
     if (cmd_queue_pop(&uart_cmd_queue, &cmd)) {
       switch (cmd) {
-        case CONN:
-          mutex_lock(&conn_state_mtx);
+        case CONN: {
+          printk("CONN\n");
+          bool new_conn_state = false;  // 지역 변수로 상태를 먼저 판단
           for (int i = 0; i < 5; i++) {
             serdev_device_write_buf(global_serdev, "CONN:\n",
-                                    sizeof("CONN:\n"));
-            ms_delay(1);  // from here
+                                    strlen("CONN:\n"));
+            msleep(1);  // busy-wait 대신 msleep 사용
+
+            mutex_lock(&rx_buffer_mtx);
+            if (rx_buffer[0] == '1') {
+              new_conn_state = true;
+              mutex_unlock(&rx_buffer_mtx);
+              break;  // 연결 성공 시 즉시 루프 탈출
+            }
+            mutex_unlock(&rx_buffer_mtx);
           }
+
+          // 최종적으로 결정된 상태를 한 번만 lock해서 업데이트
+          mutex_lock(&conn_state_mtx);
+          conn_state = new_conn_state;
           mutex_unlock(&conn_state_mtx);
           break;
-        case BUS:
+        }
+        case BUS: {
+          printk("BUS\n");
+          if (is_new_bus_array()) {
+            char cmd[100] = "BUS:";
+            int cmd_index = 4, bus_num_len = 0;
+
+            mutex_lock(&bus_array_mtx);
+            for (int i = 0; i < MAX_PLATFORM_SIZE; i++) {
+              strncpy(prev_bus_array[i], bus_array[i], sizeof(bus_array[i]));
+            }
+            mutex_unlock(&bus_array_mtx);
+
+            for (int i = 0; i < MAX_PLATFORM_SIZE; i++) {
+              bus_num_len = strlen(prev_bus_array[i]);
+              strncpy(cmd + cmd_index, prev_bus_array[i], bus_num_len);
+              cmd[cmd_index + bus_num_len] = ':';
+              cmd_index += (bus_num_len + 1);
+            }
+            cmd[cmd_index++] = '\n';
+            cmd[cmd_index] = '\0';
+
+            serdev_device_write_buf(global_serdev, cmd, cmd_index);
+
+            mutex_lock(&skip_clock_mtx);
+            skip_clock = true;
+            mutex_unlock(&skip_clock_mtx);
+          }
           break;
-        case CLOCK:
+        }
+        case CLOCK: {
+          printk("CLOCK\n");
+          char cmd[100];
+          get_clock_cmd(cmd, 100);
+          printk("CLOCK : %s\n", cmd);
+          serdev_device_write_buf(global_serdev, cmd, strlen(cmd));
           break;
-        case ONOFF:
+        }
+        case ONOFF: {
+          struct timespec64 current_utc_time;
+          ktime_get_real_ts64(&current_utc_time);
+          struct timespec64 current_kst_time = current_utc_time;
+          current_kst_time.tv_sec += 32400;
+
+          mutex_lock(&time_config_array_mtx);
+
+          if (timespec64_compare(&current_kst_time, &time_config_array[1]) >=
+              0) {
+            printk("CMD:OFF\n");
+            serdev_device_write_buf(global_serdev, "OFF:\n", strlen("OFF:\n"));
+
+            mutex_lock(&bus_array_mtx);
+            for (int i = 0; i < MAX_PLATFORM_SIZE; i++) {
+              memset(bus_array[i], '\0', sizeof(bus_array[i]));
+            }
+            mutex_unlock(&bus_array_mtx);
+
+            mutex_lock(&onoff_state_mtx);
+            onoff_state = false;
+            is_daily_updated = false;
+            printk("%s\n", onoff_state ? "true" : "false");
+            mutex_unlock(&onoff_state_mtx);
+
+            time_config_array[0].tv_sec += 86400;
+            time_config_array[1].tv_sec += 86400;
+
+            char buf[2][100];
+            format_local_timespec64_to_string(&time_config_array[0], buf[0],
+                                              100);
+            format_local_timespec64_to_string(&time_config_array[1], buf[1],
+                                              100);
+            printk("UPDT:%s\n", buf[0]);
+            printk("UPDT:%s\n", buf[1]);
+
+          } else if (!is_daily_updated &&
+                     timespec64_compare(&current_kst_time,
+                                        &time_config_array[0]) >= 0) {
+            printk("CMD:ON\n");
+            serdev_device_write_buf(global_serdev, "ON:\n", strlen("ON:\n"));
+            mutex_lock(&onoff_state_mtx);
+            onoff_state = true;
+            is_daily_updated = true;
+            printk("%s\n", onoff_state ? "true" : "false");
+            mutex_unlock(&onoff_state_mtx);
+          }
+          mutex_unlock(&time_config_array_mtx);
+
           break;
+        }
       }
     } else {
       msleep(1);
@@ -296,94 +384,59 @@ static int uart_txrx_thread_fn(void *data) {
   return 0;
 }
 
-/*main timer callback*/
+// 추천: main_timer_callback
 static enum hrtimer_restart main_timer_callback(struct hrtimer *timer) {
-  /*connection */
   cmd_queue_push(&uart_cmd_queue, CONN);
 
-  mutex_lock(&conn_state_mtx);
-  mutex_lock(&onoff_state_mtx);
+  mutex_lock(&conn_state_mtx);   // 1. conn 잠금
+  mutex_lock(&onoff_state_mtx);  // 2. onoff 잠금
+
   if (conn_state && onoff_state) {
     cmd_queue_push(&uart_cmd_queue, BUS);
-    mutex_lock(&skip_clock_mtx);
-    skip_clock = true;
-    mutex_unlock(&skip_clock_mtx);
   }
-  mutex_unlock(&conn_state_mtx);
-  mutex_unlock(&onoff_state_mtx);
 
-  hrtimer_forward_now(timer, main_period);  // 주기 설정
+  // 잠근 순서의 역순으로 해제 (onoff -> conn)
+  mutex_unlock(&onoff_state_mtx);  // 2. onoff 해제
+  mutex_unlock(&conn_state_mtx);   // 1. conn 해제
+
+  hrtimer_forward_now(timer, main_period);
   return HRTIMER_RESTART;
 }
 
+// 추천: sub_timer_callback
 static enum hrtimer_restart sub_timer_callback(struct hrtimer *timer) {
-  mutex_lock(&conn_state_mtx);
-  mutex_lock(&onoff_state_mtx);
+  mutex_lock(&conn_state_mtx);   // 1. conn 잠금
+  mutex_lock(&onoff_state_mtx);  // 2. onoff 잠금
 
   if (conn_state) {
     cmd_queue_push(&uart_cmd_queue, ONOFF);
-    mutex_lock(&skip_clock_mtx);
+    mutex_lock(&skip_clock_mtx);  // 3. skip 잠금
     if (onoff_state && !skip_clock) {
       cmd_queue_push(&uart_cmd_queue, CLOCK);
     } else {
       skip_clock = false;
     }
-    mutex_unlock(&skip_clock_mtx);
-    mutex_unlock(&onoff_state_mtx);
+    mutex_unlock(&skip_clock_mtx);  // 3. skip 해제
   }
-  mutex_unlock(&conn_state_mtx);
 
-  hrtimer_forward_now(timer, sub_period);  // 주기 설정
+  // 잠근 순서의 역순으로 해제 (onoff -> conn)
+  mutex_unlock(&onoff_state_mtx);  // 2. onoff 해제
+  mutex_unlock(&conn_state_mtx);   // 1. conn 해제
+
+  hrtimer_forward_now(timer, sub_period);
   return HRTIMER_RESTART;
 }
 
 /* Receive callback from UART */
 static int serdev_uart_recv(struct serdev_device *serdev,
                             const unsigned char *buffer, size_t size) {
+  mutex_lock(&rx_buffer_mtx);
   size_t to_copy = min(size, sizeof(rx_buffer) - 1);
-
   memcpy(rx_buffer, buffer, to_copy);
   rx_buffer[to_copy] = '\0';
   rx_size = to_copy;
-
+  mutex_unlock(&rx_buffer_mtx);
   // pr_info("serdev_echo: Received %zu bytes: %s\n", to_copy, rx_buffer);
-
-  is_updated = false;
-
-  return to_copy;
-}
-
-/* Character device: read from rx_buffer */
-static ssize_t serdev_uart_read(struct file *file, char __user *buf,
-                                size_t count, loff_t *ppos) {
-  if (rx_size == 0) return 0;
-
-  if (!is_updated) {
-    if (copy_to_user(buf, rx_buffer, rx_size)) {
-      is_updated = true;
-      return -EFAULT;
-    }
-
-    is_updated = true;
-
-    return rx_size;
-  }
-
-  return 0;
-}
-
-/* Character device: write to UART */
-static ssize_t serdev_uart_write(struct file *file, const char __user *buf,
-                                 size_t count, loff_t *ppos) {
-  char kbuf[256];
-  size_t to_copy = min(count, sizeof(kbuf) - 1);
-
-  if (copy_from_user(kbuf, buf, to_copy)) return -EFAULT;
-
-  kbuf[to_copy] = '\0';
-
-  // pr_info("serdev_echo: Sending %zu bytes: %s\n", to_copy, kbuf);
-  serdev_device_write_buf(global_serdev, kbuf, to_copy);
 
   return to_copy;
 }
@@ -410,7 +463,7 @@ static int serdev_uart_probe(struct serdev_device *serdev) {
 
   // timer setting
   main_period = ktime_set(1, 0);
-  sub_period = ktime_set(2, 0);  // 60, 2 is for debugging
+  sub_period = ktime_set(30, 0);  // 60, 2 is for debugging
 
   hrtimer_init(&main_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
   main_timer.function = main_timer_callback;
@@ -433,6 +486,7 @@ static int serdev_uart_probe(struct serdev_device *serdev) {
     return ret;
   }
 
+  serdev_device_write_buf(global_serdev, "OFF:\n", strlen("OFF:\n"));
   // pr_info("serdev_echo: /dev/%s created\n", DEVICE_NAME);
   return 0;
 }
@@ -500,9 +554,52 @@ static int fill_timespec64_with_hhmm(const char *hhmm_str,
   return 0;
 }
 
-static unsigned long millis(void) { return jiffies_to_msecs(jiffies); }
+static bool is_new_bus_array(void) {
+  bool changed = false;
+  int i;
 
-static void ms_delay(unsigned int ms) {
-  unsigned long now = millis();
-  while (millis() - now < ms);
+  mutex_lock(&bus_array_mtx);
+  for (i = 0; i < MAX_PLATFORM_SIZE; i++) {
+    if (strcmp(bus_array[i], prev_bus_array[i]) != 0) {
+      changed = true;
+      // 루프를 즉시 멈추고 임계 영역을 빠져나가도록 break 사용
+      break;
+    }
+  }
+  mutex_unlock(&bus_array_mtx);  // 임계 영역이 끝난 후 한번만 unlock
+
+  return changed;
+}
+
+static void get_clock_cmd(char *buf, size_t buf_size) {
+  struct timespec64 ts;
+  struct tm tm;
+
+  // 1. UTC 기준 현재 시간 얻기
+  ktime_get_real_ts64(&ts);  // ts.tv_sec: 초 단위 시간
+
+  // 2. local time 보정: sys_tz은 offset (분 단위)
+  ts.tv_sec += 32400;
+
+  // 3. 초 단위 시간을 struct tm으로 변환 (UTC에서 보정된 값)
+  time64_to_tm(ts.tv_sec, 0,
+               &tm);  // korean time으로 고정(다른 나라면 시간 보정 필요)
+
+  // 4. 문자열 포맷 구성: TIME:YYYY:MMDD:hhmm\n
+  snprintf(buf, buf_size, "TIME:%04ld:%02d%02d:%02d%02d:\n",
+           (long)tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour,
+           tm.tm_min);
+}
+
+// for debugging
+static void format_local_timespec64_to_string(const struct timespec64 *ts,
+                                              char *buf, size_t buf_size) {
+  struct tm tm;
+
+  // ts는 이미 local time (예: KST) 기준이므로 보정 없이 바로 변환
+  time64_to_tm(ts->tv_sec, 0, &tm);
+
+  snprintf(buf, buf_size, "%04ld년 %02d월 %02d일 %02d:%02d\n",
+           (long)tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour,
+           tm.tm_min);
 }
