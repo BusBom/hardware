@@ -265,7 +265,7 @@ static int uart_txrx_thread_fn(void *data) {
     if (cmd_queue_pop(&uart_cmd_queue, &cmd)) {
       switch (cmd) {
         case CONN: {
-          printk("CONN\n");
+          // printk("CONN\n");
           bool new_conn_state = false;  // 지역 변수로 상태를 먼저 판단
           for (int i = 0; i < 5; i++) {
             serdev_device_write_buf(global_serdev, "CONN:\n",
@@ -288,7 +288,7 @@ static int uart_txrx_thread_fn(void *data) {
           break;
         }
         case BUS: {
-          printk("BUS\n");
+          // printk("BUS\n");
           if (is_new_bus_array()) {
             char cmd[100] = "BUS:";
             int cmd_index = 4, bus_num_len = 0;
@@ -317,7 +317,7 @@ static int uart_txrx_thread_fn(void *data) {
           break;
         }
         case CLOCK: {
-          printk("CLOCK\n");
+          // printk("CLOCK\n");
           char cmd[100];
           get_clock_cmd(cmd, 100);
           printk("CLOCK : %s\n", cmd);
