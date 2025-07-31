@@ -456,7 +456,7 @@ static int position[DISPLAY_SECTION_CNT][2] = { { 2, 2 }, { 2, 34 }, { 18, 2 },
 		{ 18, 34 } };
 
 void draw_jeongwangpan(int r, int g, int b, char (*str)[DISPLAY_STRING_LENGTH]) {
-	draw_frame(0, 1, 1);
+	draw_frame(1, 1, 0);
 	for (int i = 0; i < DISPLAY_SECTION_CNT; i++) {
 		write_str_display(position[i][0], position[i][1], r, g, b, str[i],
 				strlen(str[i]));
@@ -489,7 +489,7 @@ void draw_clock(int r, int g, int b, char (*str)[DISPLAY_STRING_LENGTH]) {
 	line2[4] = str[2][3];        // 분 (2nd digit)
 	line2[5] = '\0';
 
-	draw_big_frame(0, 1, 1);
+	draw_big_frame(1, 1, 0);
 
 	write_str_display(3, 7, r, g, b, line1, strlen(line1));
 	write_str_display(16, 19, r, g, b, line2, strlen(line2));

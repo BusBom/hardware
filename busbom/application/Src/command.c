@@ -29,7 +29,7 @@ void command(char *data) {
 	if (strcmp(parsed_cmd_parameters[0], "ON") == 0) {
 		extern int onoff;
 		onoff = 1;
-		draw_frame(0, 1, 1);
+		draw_frame(1, 1, 0);
 	} else if (strcmp(parsed_cmd_parameters[0], "OFF") == 0) {
 		extern int onoff;
 		onoff = 0;
@@ -39,14 +39,14 @@ void command(char *data) {
 		for (int i = 1; i < count - 1; i++) {
 			strncpy(buses[i - 1], parsed_cmd_parameters[i], RX_BUFFER_SIZE - 1);
 		}
-		draw_jeongwangpan(1, 0, 0, buses);
+		draw_jeongwangpan(1, 1, 1, buses);
 		mp3_bus_inform(buses, count-2);
 	} else if (strcmp(parsed_cmd_parameters[0], "TIME") == 0) {
 		memset(time, 0, sizeof(time));
 		for (int i = 1; i < count - 1; i++) {
 			strncpy(time[i - 1], parsed_cmd_parameters[i], RX_BUFFER_SIZE - 1);
 		}
-		draw_clock(1, 0, 0, time);
+		draw_clock(1, 1, 1, time);
 	}
 	else if(strcmp(parsed_cmd_parameters[0], "CONN") == 0){
 		uint8_t conn[] = "1";
