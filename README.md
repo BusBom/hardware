@@ -1,63 +1,79 @@
-# BusBom 프로젝트
+# BusBom Project Installation and Usage Manual
 
-이 프로젝트는 STM32 펌웨어와 Raspberry Pi 4용 커널 모듈 기반 UART 디바이스 드라이버를 포함합니다. STM32는 STM32CubeIDE 1.18.1로 빌드하며, Raspberry Pi에서는 serdev 기반 드라이버를 통해 UART 통신을 수행합니다.
+## 1. Overview
 
-펌웨어 구조도
-<img width="3448" height="2048" alt="image" src="https://github.com/user-attachments/assets/3153f47e-b32e-4c6c-af3c-683003207166" />
+The **BusBom Project** consists of two main components for UART-based communication:
 
-드라이버 구조도
-<img width="9328" height="4164" alt="image" src="https://github.com/user-attachments/assets/4243f8b9-81a4-403b-8107-130ecb626cf6" />
+- **STM32 firmware** (built using STM32CubeIDE 1.18.1)
+- **Raspberry Pi 4 kernel module-based UART device driver** (using serdev)
 
+### System Structure
 
-## STM32 펌웨어 빌드 및 업로드
+- STM32 functions as the UART transmitter, Raspberry Pi as the receiver.
+- Uses the serdev interface for kernel-level communication.
 
-1. STM32CubeIDE 1.18.1 실행
-2. `File` → `Open Projects from File System...` 클릭
-3. `Directory`에 `busbom` 폴더 경로 지정 → Finish
-4. Project Explorer에서 `busbom` 프로젝트 우클릭 → `Build Project`
-5. 빌드 완료 후 보드를 연결
-6. 프로젝트 우클릭 → `Run As` → `1 STM32 Cortex-M C/C++ Application` 선택
-7. 디버그 설정 창이 뜰 경우 OK 또는 Run 선택
+## 2. System Requirements
 
-## 라즈베리파이 설정 및 드라이버 설치
+| Item | Specification |
+|------|---------------|
+| MCU | STM32 series microcontroller |
+| Development Tool | STM32CubeIDE 1.18.1 |
+| SBC | Raspberry Pi 4 (64bit) |
+| OS | Raspberry Pi OS 64bit Legacy (Kernel 6.1.21-v8+) |
+| Communication | UART (GPIO14: TX, GPIO15: RX) |
+| Kernel Driver | serdev-based kernel module (manual build and load) |
 
-### 구동 환경
+---
 
-- 기기: Raspberry Pi 4
-- OS: 64bit Legacy (6.1.21-v8+, aarch64)
-- UART 핀 연결:
-  - GND: 회색 (Pin 6)
-  - TX : GPIO14, 보라색 (Pin 8)
-  - RX : GPIO15, 파란색 (Pin 10)
- 
-밑에 안내된 순서대로 수행할 것
+## 3. STM32 Firmware Build and Upload
 
-### 커널 헤더 설치
+1. Launch **STM32CubeIDE**.
+2. Select `File` → `Open Projects from File System...`.
+3. Set `Directory` to the `busbom` project folder path → Finish.
+4. In **Project Explorer**, right-click on the `busbom` project → `Build Project`.
+5. Connect the STM32 board.
+6. Right-click on the project → `Run As` → `1 STM32 Cortex-M C/C++ Application`.  
+   If the debug configuration window appears, click OK or Run.
+
+---
+
+## 4. Raspberry Pi Setup and Driver Installation
+
+### 4.1 UART Hardware Connection
+
+| Raspberry Pi Pin | Signal | Example Color |
+|------------------|--------|---------------|
+| Pin 6            | GND    | Gray          |
+| Pin 8 (GPIO14)   | TX     | Purple        |
+| Pin 10 (GPIO15)  | RX     | Blue          |
+
+### 4.2 Install Packages and Kernel Headers
 ```bash
 sudo apt update
 sudo apt install raspberrypi-kernel-headers
-ls /lib/modules/$(uname -r)  # build 폴더 존재 확인
+ls /lib/modules/$(uname -r)
+# Ensure the 'build' folder exists
 ```
 
-### 설정 파일 권한 부여
+### 4.3 Edit Configuration Files
 ```bash
 sudo chmod +w /boot/config.txt
 sudo chmod +w /boot/cmdline.txt
 ```
 
-### /boot/config.txt에 다음 줄 추가 (sudo 편집기 사용)
+#### Add to `/boot/config.txt`:
 ```bash
 enable_uart=1
 dtoverlay=disable-bt
 dtoverlay=serdev_overlay
 ```
 
-### /boot/cmdline.txt에서 다음 항목 제거
+#### Remove from `/boot/cmdline.txt`:
 ```bash
 console=serial0,115200
 ```
 
-### 블루투스 관련 서비스 종료
+### 4.4 Disable Bluetooth
 ```bash
 sudo systemctl disable hciuart
 sudo systemctl stop hciuart
@@ -65,7 +81,7 @@ sudo systemctl disable bluetooth
 sudo systemctl stop bluetooth
 ```
 
-### raspi-config 설정
+### 4.5 Configure Serial Port with `raspi-config`
 ```bash
 sudo raspi-config
 # Interface Options → Serial Port
@@ -74,51 +90,101 @@ sudo raspi-config
 sudo reboot
 ```
 
-### 빌드 및 모듈 적재, 해제
+---
+
+## 5. Build and Load the Kernel Module
+
+### 5.1 Download and Build Driver Source
 ```bash
-# 드라이버 소스 다운로드 및 빌드
 git clone https://github.com/BusBom/hardware.git
 cd hardware/uart/driver
 make
+```
 
-# 시간 동기화 및 테스트 입력
+### 5.2 Enable Time Synchronization
+```bash
 sudo timedatectl set-ntp true
-timedatectl status  # system clock synchronized: yes 확인
-echo "0100:2100" | sudo tee /dev/serdev-uart
+timedatectl status
+# Check that 'System clock synchronized: yes'
+```
 
-# 오버레이 및 커널 모듈 적재
+### 5.3 Load Kernel Module and Test
+```bash
 sudo cp serdev_overlay.dtbo /boot/overlays/
 sudo insmod serdev_uart.ko
-sudo dmesg -c  # "serdev_echo: probe called" 메시지 확인
+sudo dmesg -c
+# Look for "serdev_echo: probe called"
+```
 
-# 모듈 제거
+### 5.4 Remove Module (if needed)
+```bash
 sudo rmmod serdev_uart
 ```
 
-### 테스트 실행
+---
+
+## 6. Run the Test Program
 ```bash
 cd ..
 make
 sudo ./uart
 ```
-정상 출력시 다음과 같음
+
+### Example Output
 ```bash
 Written time range: 0830:2130
-Written bus array: 1234:5678:A0B1:M1M2  # B는 음성 없음
-Connection state: CONNECTED            # 연결 성공 여부
+Written bus array: 1234:5678:A0B1:M1M2
+Connection state: CONNECTED
 ```
-### 드라이버 사용법
-write 함수와 read 함수로 사용합니다.
+
+---
+
+## 7. Driver Usage
+
+### `write()` Function
+
+- **Set bus numbers**: `"BUS1:BUS2:BUS3:BUS4"`  
+  Use a space character (`' '`) for empty platforms.  
+  Example: `"6001: :6003:6004"`
+
+- **Set operating time**: `"START_TIME:END_TIME"` (24-hour format)  
+  Example: `"0910:0012"` → 9:10 AM to 12:12 AM  
+  Example: `"1612:2010"` → 4:12 PM to 8:10 PM
+
 ```bash
-1) write() - 문자열로 전송
-버스 번호 관련 : “PAR1:PAR2:PAR3:PAR4”, 만약 비어 있는 플랫폼이면 공백 문자를 넣어서 보줄 것
-ex) “6001:6002:6003:6004”, “6001: :6003:6004”
-시간 설정 관련 : 24시간 체계로 보내 줄 것, “START_TIME:END_TIME” 형식으로
-ex) “0910:0012”(오전 9시 10분, 오전 12시 12분), “1612:2010”(오후 4시 12분, 오후 8시 10분) 
-
-2) read() - 연결 상태 확인
-1 : 연결
-0 : 연결 끊어짐
+echo "0100:2100" | sudo tee /dev/serdev-uart
+echo "6001:6002:6003:6004" | sudo tee /dev/serdev-uart
 ```
-처음 연결하는 경우에는 시간이 걸리는 경우가 있습니다. 유의해주세요.
 
+### `read()` Function
+
+- **Check connection status**:
+  - `1` : Connected
+  - `0` : Disconnected
+
+```bash
+cat /dev/serdev-uart
+```
+
+⚠ **Note**: Initial connection may take some time.
+
+---
+
+## 8. Reference Diagrams
+
+- **STM32 Firmware Architecture**  
+  ![Firmware Architecture](https://github.com/user-attachments/assets/3153f47e-b32e-4c6c-af3c-683003207166)
+
+- **Raspberry Pi Driver Architecture**  
+  ![Driver Architecture](https://github.com/user-attachments/assets/4243f8b9-81a4-403b-8107-130ecb626cf6)
+
+---
+
+## 9. Troubleshooting
+
+| Symptom | Cause and Solution |
+|---------|--------------------|
+| No `serdev-uart` device | Check `/boot/config.txt` and kernel module settings |
+| No "probe called" message | Verify with `dmesg` after `insmod` |
+| `cat /dev/serdev-uart` returns 0 | Check STM32 connection or TX/RX wiring |
+| `write()` has no effect | Format error or `/dev/serdev-uart` permission issue |
