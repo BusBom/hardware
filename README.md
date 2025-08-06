@@ -2,6 +2,13 @@
 
 이 프로젝트는 STM32 펌웨어와 Raspberry Pi 4용 커널 모듈 기반 UART 디바이스 드라이버를 포함합니다. STM32는 STM32CubeIDE 1.18.1로 빌드하며, Raspberry Pi에서는 serdev 기반 드라이버를 통해 UART 통신을 수행합니다.
 
+펌웨어 구조도
+<img width="3448" height="2048" alt="image" src="https://github.com/user-attachments/assets/3153f47e-b32e-4c6c-af3c-683003207166" />
+
+드라이버 구조도
+<img width="9328" height="4164" alt="image" src="https://github.com/user-attachments/assets/4243f8b9-81a4-403b-8107-130ecb626cf6" />
+
+
 ## STM32 펌웨어 빌드 및 업로드
 
 1. STM32CubeIDE 1.18.1 실행
@@ -113,4 +120,5 @@ ex) “0910:0012”(오전 9시 10분, 오전 12시 12분), “1612:2010”(오�
 1 : 연결
 0 : 연결 끊어짐
 ```
+처음 연결하는 경우에는 시간이 걸리는 경우가 있습니다. 유의해주세요.
 
